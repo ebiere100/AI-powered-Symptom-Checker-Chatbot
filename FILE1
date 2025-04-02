@@ -1,0 +1,73 @@
+pip install transformers torch nltk scikit-learn
+import random
+import nltk
+from transformers import pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+nltk.download('punkt')
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+# Sample symptom-condition knowledge base
+conditions_db = {
+    "fever, cough, fatigue": "You may have the flu or COVID-19.",
+    "headache, nausea, sensitivity to light": "These are signs of a migraine.",
+    "abdominal pain, diarrhea, vomiting": "Sounds like a gastrointestinal infection.",
+    "sneezing, runny nose, itchy eyes": "You might have an allergy or the common cold.",
+    "chest pain, shortness of breath, dizziness": "These could be signs of a cardiac issue. Seek urgent care.",
+    "joint pain, swelling, stiffness": "These symptoms may suggest arthritis.",
+}
+
+# Preprocessing
+stop_words = set(stopwords.words('english'))
+
+def preprocess(text):
+    words = word_tokenize(text.lower())
+    filtered = [w for w in words if w.isalnum() and w not in stop_words]
+    return " ".join(filtered)
+
+# Convert DB keys to TF-IDF vectors
+vectorizer = TfidfVectorizer()
+db_symptoms = list(conditions_db.keys())
+processed_symptoms = [preprocess(s) for s in db_symptoms]
+tfidf_matrix = vectorizer.fit_transform(processed_symptoms)
+
+# Sentiment analysis (for user empathy)
+sentiment_analyzer = pipeline("sentiment-analysis")
+
+# Chatbot response
+def get_condition(user_input):
+    user_symptoms = preprocess(user_input)
+    user_vec = vectorizer.transform([user_symptoms])
+    similarities = cosine_similarity(user_vec, tfidf_matrix)
+    best_match_index = similarities.argmax()
+    confidence = similarities[0][best_match_index]
+    
+    if confidence > 0.3:
+        return conditions_db[db_symptoms[best_match_index]]
+    else:
+        return "I'm sorry, I couldn't determine your condition. Please consult a healthcare professional."
+
+# Main chatbot loop
+def chatbot():
+    print("🤖 Hi! I'm your AI Symptom Checker. Describe your symptoms (or type 'exit' to quit):")
+    
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() in ["exit", "quit", "bye"]:
+            print("🤖 Take care! Wishing you good health.")
+            break
+        
+        # Show empathy if user seems distressed
+        sentiment = sentiment_analyzer(user_input)[0]
+        if sentiment['label'] == 'NEGATIVE':
+            print("🤖 I'm sorry you're feeling this way. Let's see if we can understand your symptoms.")
+        
+        response = get_condition(user_input)
+        print(f"🤖 {response}")
+
+# Run the chatbot
+if __name__ == "__main__":
+    chatbot()
